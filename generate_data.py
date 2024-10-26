@@ -19,7 +19,7 @@ def generate_gaussian_mixture_data(num_samples, num_components, means, stds, wei
 
 
 # 生成一维高斯混合数据
-def gaussian_1d_data(num_samples=10000):
+def gaussian_1d_data(num_samples=100000):
     num_components = 2
     means = torch.tensor([-3.0, 3.0])
     stds = torch.tensor([1,1])
@@ -37,7 +37,7 @@ def gaussian_1d_data(num_samples=10000):
     data = torch.stack(samples)
 
     print("Data shape:", data.shape)
-    file_path = 'SchB/data/mix_gaussian.pt'
+    file_path = './data/mix_gaussian.pt'
     torch.save(data, file_path)
 
 
@@ -70,3 +70,4 @@ def plot_2d(x):
     axs.set_title('x from rho_0')
 
 
+# gaussian_1d_data(num_samples=100000)

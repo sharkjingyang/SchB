@@ -1,10 +1,68 @@
 import torch
 import torch.nn as nn
 import math
+import numpy as np
 from torch.nn.functional import pad
 import copy
+from utils import count_parameters
+class GaussianFourierProjection(nn.Module):
+  """Gaussian random features for encoding time steps."""
+  def __init__(self, embed_dim, scale=30.):
+    super().__init__()
+    # Randomly sample weights during initialization. These weights are fixed
+    # during optimization and are not trainable.
+    self.W = nn.Parameter(torch.randn(embed_dim // 2) * scale, requires_grad=False)
+  def forward(self, x):
+    x_proj = x * self.W * 2 * np.pi
+    # print(x_proj.shape)
+    return torch.cat([torch.sin(x_proj), torch.cos(x_proj)], dim=-1)
 
+class ResidualBlock(nn.Module):
+    def __init__(self,hidden_unit=32):
+        super(ResidualBlock, self).__init__()
+        self.hidden_unit=hidden_unit
+        self.conv1 = nn.Linear(hidden_unit,hidden_unit,bias=True)
+        self.conv2 = nn.Linear(hidden_unit,hidden_unit,bias=True)
+        self.embed = nn.Sequential(GaussianFourierProjection(embed_dim=self.hidden_unit),
+            nn.Linear(hidden_unit, hidden_unit))
+        self.activation = nn.Softplus()
+        self.act = lambda x: x * torch.sigmoid(x)
 
+    def forward(self, x, t):
+        residual = x
+        out = self.conv1(x)
+        out = self.activation(out)
+        time_embed = self.act(self.embed(t)).squeeze()
+        out += time_embed
+        out = self.conv2(out)
+        out = self.activation(out)
+
+        out += residual
+        return out
+
+class ResNet(nn.Module):
+    def __init__(self,d=2,hidden_unit=32,num_resblocks=3):
+        super(ResNet, self).__init__()
+        self.num_resblocks = num_resblocks
+        self.hidden_unit=hidden_unit
+        self.d=d
+        self.init_conv = nn.Linear(self.d,hidden_unit,bias=True)
+        self.blocks = nn.ModuleList([
+            ResidualBlock(hidden_unit=self.hidden_unit)
+            for _ in range(self.num_resblocks)
+        ])
+        self.final_conv = nn.Linear(hidden_unit,self.d,bias=False)
+        self.activation = nn.Softplus()
+
+    def forward(self, x, t):
+        x = self.init_conv(x)
+        # x = self.activation(x)
+        for block in self.blocks:
+            x = block(x, t)
+        x = self.final_conv(x)
+        
+        return x
+    
 
 class velocity_net(nn.Module):
     def __init__(self,d):
@@ -23,6 +81,9 @@ class velocity_net(nn.Module):
             nn.Linear(hidden_unit,d,bias=False),
         )
 
+        self.embed = nn.Sequential(GaussianFourierProjection(embed_dim=hidden_unit),
+         nn.Linear(hidden_unit, hidden_unit))
+        
     def forward(self,x,t):
         # return  x[:,:self.d]
         z = pad(x, (0, 1, 0, 0), value=t)
@@ -212,41 +273,49 @@ class Phi(nn.Module):
         # return grad.t(), trH + torch.trace(symA[0:d,0:d])
 
         # indexed version of: return grad.t() ,  trH + torch.trace( torch.mm( E.t() , torch.mm(  symA , E) ) )
+
+
+class ConcatSquashLinear(nn.Module):
+    def __init__(self, dim_in, dim_out):
+        super(ConcatSquashLinear, self).__init__()
+        self._layer = nn.Linear(dim_in, dim_out)
+        self._hyper_bias = nn.Linear(1, dim_out, bias=False)
+        self._hyper_gate = nn.Linear(1, dim_out)
+
+    def forward(self, x, t):
+        return self._layer(x) * torch.sigmoid(self._hyper_gate(t.view(-1, 1))) \
+            + self._hyper_bias(t.view(-1, 1))
     
+class ConcatSquash_net(nn.Module):
+    def __init__(self,d):
+        super(ConcatSquash_net, self).__init__()
+        self.d=d
+        self.net1=ConcatSquashLinear(dim_in=self.d, dim_out=64)
+        self.net2=ConcatSquashLinear(dim_in=64, dim_out=64)
+        self.net3=ConcatSquashLinear(dim_in=64, dim_out=64)
+        self.net4=ConcatSquashLinear(dim_in=64, dim_out=self.d)
+        self.act=nn.Softplus()
+      
+    def forward(self, x, t):
+        t=torch.tensor(t).float().to(x.device)
+        x=self.net1(x,t)
+        x=self.act(x)
+        x=self.net2(x,t)
+        x=self.act(x)
+        x=self.net3(x,t)
+        x=self.act(x)
+        x=self.net4(x,t)
+        return x
+
+      
+    
+
 if __name__ == "__main__":
 
-    import time
-    import math
-
-    # test case
+    device="cuda"
+    model=ConcatSquash_net().to(device)
+    x=torch.ones(128,2).to(device)
+    t=torch.ones(128,1).to(device)
+    print("total parameter is: ", count_parameters(model))
     
-    m = 5
-
-    net = Phi(nTh=2, m=m, d=3)
-    net.N.layers[0].weight.data  = 0.1 + 0.0 * net.N.layers[0].weight.data
-    net.N.layers[0].bias.data    = 0.2 + 0.0 * net.N.layers[0].bias.data
-    net.N.layers[1].weight.data  = 0.3 + 0.0 * net.N.layers[1].weight.data
-    net.N.layers[1].weight.data  = 0.3 + 0.0 * net.N.layers[1].weight.data
-
-    # number of samples-by-(d+1)
-    x = torch.Tensor([[1.0 ,4.0 , 0.5],[2.0,5.0,0.6],[3.0,6.0,0.7],[0.0,0.0,0.0]])
-    y = net(x,t=1)
-    print(y)
-
-    # test timings
-    d = 400
-    m = 32
-    nex = 1000
-
-    net = Phi(nTh=5, m=m, d=d)
-    net.eval()
-    x = torch.randn(nex,d)
-    y = net(x,t=1)
-
-    end = time.time()
-    g,h = net.trHess(x,t=1)
-    print('traceHess takes ', time.time()-end)
-
-    end = time.time()
-    g = net.trHess(x, t=1,justGrad=True)
-    print('JustGrad takes  ', time.time()-end)
+    print(model(x,t).shape)
