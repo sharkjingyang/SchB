@@ -6,10 +6,10 @@ function [m_new,rho_new]=SchB_single_step(m,rho,phi,mu,Nx,dx,Nt,dt)
     end
 
     laplace_phi=zeros(size(m));
-    laplace_phi(:,1)=(phi(:,2)-phi(:,1))/dx/dx;
-    laplace_phi(:,Nx)=(phi(:,Nx-1)-phi(:,Nx))/dx/dx;
+    laplace_phi(:,1)=(phi(:,2)-2*phi(:,1))/dx/dx;
+    laplace_phi(:,Nx)=(phi(:,Nx-1)-2*phi(:,Nx))/dx/dx;
     for i=2:Nx-1
-        laplace_phi(:,i)=-(phi(:,i+1)-2*phi(:,i)+phi(:,i-1))/dx/dx;
+        laplace_phi(:,i)=(phi(:,i+1)-2*phi(:,i)+phi(:,i-1))/dx/dx;
     end
 
     a=2/mu*ones(size(m));

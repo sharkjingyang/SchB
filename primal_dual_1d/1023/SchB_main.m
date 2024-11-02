@@ -1,4 +1,4 @@
-Nx = 80;
+Nx = 120;
 Nt = 60;
 mu=0.005;
 tao=0.005;
@@ -7,9 +7,9 @@ X = [-10, 10];
 T = [0, 1];
 dx = (X(2)- X(1)) / Nx;
 dt = 1 / Nt;
-x_space = linspace(X(1)+dx, X(2), Nx);
+x_space = linspace(X(1)+0.5*dx, X(2)-0.5*dx, Nx);
 t_space = linspace(T(1), T(2), Nt + 1);
-[X_plot, Y_plot] = meshgrid(x_space, t_space);
+[X_plot, Y_plot] = meshgrid(rho_space, t_space);
 rho = rand(Nt + 1, Nx)/Nx+0.0001;
 rho(1, :) = rho_0(x_space);
 rho(end, :) = rho_1(x_space);
@@ -22,6 +22,7 @@ rho_opt=rho(1:end-1,:);
 for k=1:N_itr
     
     [m_new,rho_new]=SchB_single_step(m,rho_opt,phi,mu,Nx,dx,Nt,dt);
+    
     m_temp=2*m_new-m;
     rho_temp=2*rho_new-rho_opt;
 
