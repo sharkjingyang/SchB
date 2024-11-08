@@ -1,7 +1,7 @@
 # SchB-Flow
 Pytorch implementation of our SchB-Flow。
 
-The code is developed based on [OT-Flow](https://github.com/EmoryMLIP/OT-Flow). 
+The code is developed based on [OT-Flow](https://github.com/EmoryMLIP/OT-Flow) and [torchdiff](https://github.com/rtqichen/torchdiffeq). 
 
 ## Associated Publication
 

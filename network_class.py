@@ -88,7 +88,40 @@ class velocity_net(nn.Module):
         # return  x[:,:self.d]
         z = pad(x, (0, 1, 0, 0), value=t)
         return  self.net(z)
-    
+
+class ConcatSquashLinear(nn.Module):
+    def __init__(self, dim_in, dim_out):
+        super(ConcatSquashLinear, self).__init__()
+        self._layer = nn.Linear(dim_in, dim_out)
+        self._hyper_bias = nn.Linear(1, dim_out, bias=False)
+        self._hyper_gate = nn.Linear(1, dim_out)
+
+    def forward(self, t, x):
+        return self._layer(x) * torch.sigmoid(self._hyper_gate(t.view(1, 1))) \
+            + self._hyper_bias(t.view(1, 1))
+
+
+class ODEnet(nn.Module):
+    def __init__(self,d):
+        super().__init__()
+        hidden_unit=32
+        self.d=d
+   
+        self.layers = nn.ModuleList([
+            ConcatSquashLinear(d, 64),
+            ConcatSquashLinear(64, 64),
+            ConcatSquashLinear(64, 64),
+            ConcatSquashLinear(64, d)
+        ])
+
+
+    def forward(self,t,x):
+        for i, layer in enumerate(self.layers):
+            x = layer(t, x)
+            if i < len(self.layers) - 1:
+                x = nn.Tanh()(x)
+        return x
+
 
 def antiderivTanh(x): # activation function aka the antiderivative of tanh
     return torch.abs(x) + torch.log(1+torch.exp(-2.0*torch.abs(x)))
@@ -275,37 +308,7 @@ class Phi(nn.Module):
         # indexed version of: return grad.t() ,  trH + torch.trace( torch.mm( E.t() , torch.mm(  symA , E) ) )
 
 
-class ConcatSquashLinear(nn.Module):
-    def __init__(self, dim_in, dim_out):
-        super(ConcatSquashLinear, self).__init__()
-        self._layer = nn.Linear(dim_in, dim_out)
-        self._hyper_bias = nn.Linear(1, dim_out, bias=False)
-        self._hyper_gate = nn.Linear(1, dim_out)
 
-    def forward(self, x, t):
-        return self._layer(x) * torch.sigmoid(self._hyper_gate(t.view(-1, 1))) \
-            + self._hyper_bias(t.view(-1, 1))
-    
-class ConcatSquash_net(nn.Module):
-    def __init__(self,d):
-        super(ConcatSquash_net, self).__init__()
-        self.d=d
-        self.net1=ConcatSquashLinear(dim_in=self.d, dim_out=64)
-        self.net2=ConcatSquashLinear(dim_in=64, dim_out=64)
-        self.net3=ConcatSquashLinear(dim_in=64, dim_out=64)
-        self.net4=ConcatSquashLinear(dim_in=64, dim_out=self.d)
-        self.act=nn.Softplus()
-      
-    def forward(self, x, t):
-        t=torch.tensor(t).float().to(x.device)
-        x=self.net1(x,t)
-        x=self.act(x)
-        x=self.net2(x,t)
-        x=self.act(x)
-        x=self.net3(x,t)
-        x=self.act(x)
-        x=self.net4(x,t)
-        return x
 
       
     
@@ -313,9 +316,7 @@ class ConcatSquash_net(nn.Module):
 if __name__ == "__main__":
 
     device="cuda"
-    model=ConcatSquash_net().to(device)
     x=torch.ones(128,2).to(device)
     t=torch.ones(128,1).to(device)
-    print("total parameter is: ", count_parameters(model))
+    # print("total parameter is: ", count_parameters(model))
     
-    print(model(x,t).shape)
