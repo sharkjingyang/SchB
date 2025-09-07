@@ -1,5 +1,5 @@
 Nx = 120;
-Nt = 60;
+Nt =80;
 mu=0.005;
 tao=0.005;
 N_itr=200000;
@@ -7,7 +7,7 @@ X = [-10, 10];
 T = [0, 1];
 dx = (X(2)- X(1)) / Nx;
 dt = 1 / Nt;
-x_space = linspace(X(1)+0.5*dx, X(2)-0.5*dx, Nx);
+x_space = linspace(X(1), X(2)-dx, Nx);
 t_space = linspace(T(1), T(2), Nt + 1);
 [X_plot, Y_plot] = meshgrid(x_space, t_space);
 rho = rand(Nt + 1, Nx)/Nx+0.0001;
@@ -48,31 +48,41 @@ for k=1:N_itr
     for t=1:Nt-1
         dif_rho(t,:)=gap_rho(t+1,:)-gap_rho(t,:);
     end
-    R=R-2*sum(gap_phi.*(div_m(gap_m,Nx,dx)+dif_rho/dt     ),"all");
+    R=R-2*sum(gap_phi.*(div_m(gap_m,Nx,dx)+dif_rho/dt ),"all");
     
     % compute WFR distance
     D=1/2*sum(m.^2./rho_opt,"all");
     disp(k);
     fprintf('the value of SchB is %9.6f\n',D*dx*dt);
     fprintf('the value of gap is %9.3e\n',R);
+    
+    rho(1:end-1,:)=rho_opt;
 
-
+    
     %test_plot
-    if mod(k, 10000) == 0
+    if mod(k, 1000) == 0
+       save('m_rho_t.mat', 'm', 'rho');
        rho_plot=zeros(size(rho));
        rho_plot(1:end-1,:)=rho_opt;
        rho_plot(end,:)=rho(end,:);
+% 
+%        surf(X_plot, Y_plot, rho_plot);
+%        xlabel('x');
+%        ylabel('t');
+%        zlabel('rho');
+%        drawnow;
+%        pause(0.2);
+%        clf;
+%        
 
-       surf(X_plot, Y_plot, rho_plot);
-       xlabel('x');
-       ylabel('t');
-       zlabel('rho');
-       title('3D Plot');
-       drawnow;
+       plot(x_space, m(63,:)./rho_opt(63,:)); 
        pause(0.2);
-       clf;
+       clf; 
+       
+               
     end
 end
+
 
 
 
